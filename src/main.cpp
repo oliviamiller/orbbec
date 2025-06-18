@@ -1,14 +1,14 @@
-#include <iostream> 
+
+#include <iostream>
+#include <chrono>
 #include <libobsensor/ObSensor.hpp>
 #include <opencv2/opencv.hpp>
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
 
 void saveColor(std::shared_ptr<ob::Frame> colorFrame) {
     std::vector<int> compression_params;
     compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
     compression_params.push_back(90);
-    std::string colorName = "color_"+std::to_string(colorFrame->timeStamp() ) + ".jpg";
+    std::string colorName = "../Color/color_"+std::to_string(colorFrame->systemTimeStamp() ) + ".jpg";
     cv::Mat colorRawMat(1, colorFrame->dataSize(), CV_8UC1, colorFrame->data());
     cv::Mat colorMat = cv::imdecode(colorRawMat, 1);
     cv::imwrite(colorName, colorMat, compression_params);
@@ -24,7 +24,8 @@ void saveDepth(std::shared_ptr<ob::Frame> depthFrame) {
     compression_params.push_back(cv::IMWRITE_PNG_STRATEGY);
     compression_params.push_back(cv::IMWRITE_PNG_STRATEGY_DEFAULT);
     //compression_params.push_back(90);
-    std::string depthName = "Depth_" + std::to_string(depthFrame->timeStamp()) + ".png";
+    // System time stamp should be the UNIX time in ms
+    std::string depthName = "../Depth/Depth_" + std::to_string(depthFrame->systemTimeStamp()) + ".png";
     auto videoFrame = std::dynamic_pointer_cast<ob::VideoFrame>(depthFrame);
     cv::Mat depthMat(videoFrame->height(), videoFrame->width(), CV_16UC1, depthFrame->data());
     cv::imwrite(depthName, depthMat, compression_params);
@@ -112,77 +113,153 @@ void makePointCloud(std::shared_ptr<ob::Frame> frames) {
     saveRGBPointsToPCD(frame, pcdName);
 }
 
-int main() {
-    try {
-        std::cout << "starting orbbec program" << std::endl;
-        ob::Pipeline pipe;
 
-        std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
-        auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
-        std::shared_ptr<ob::VideoStreamProfile> depthProfile = nullptr;
-        if(depthProfiles) {
-            depthProfile = std::const_pointer_cast<ob::StreamProfile>(depthProfiles->getProfile(OB_PROFILE_DEFAULT))->as<ob::VideoStreamProfile>();
-        }
-
-        std :: cout << "enabling depth stream" << std::endl;
-        config->enableStream(depthProfile);
-
-        auto colorProfiles = pipe.getStreamProfileList(OB_SENSOR_COLOR);
-        std::shared_ptr<ob::VideoStreamProfile> colorProfile = nullptr;
-        if (colorProfiles) {
-            colorProfile = std::const_pointer_cast<ob::StreamProfile>(colorProfiles->getProfile(OB_PROFILE_DEFAULT))->as<ob::VideoStreamProfile>();
-        }
-        std :: cout << "enabling color stream" << std::endl;
-        config -> enableStream(colorProfile);
-
-        // ensure depth and color are synchronized.
-        pipe.enableFrameSync();
-
-        pipe.start(config);
-
-        std::cout << "waiting for frames" << std::endl;
-
-        // Discarding the first few frames since it takes a bit for them to initialize. 
-        for (int i = 0; i<5; i++) {
-            pipe.waitForFrames();
-        }
-
-        auto frames = pipe.waitForFrames();
-        if(!frames) {
-            std::cerr << "couldnt get frames" << std::endl;
-            return -1;
-        }
-
-        auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align depth frame to color frame
-        auto alignedFrames = alignFilter->process(frames);
-        std::cout << "got frames" <<  std::endl;
-        std::cout << frames->getCount() << std::endl;
-
-
-        auto colorFrame = frames->colorFrame();
-        if(!colorFrame) {
-            std::cerr << "couldnt get color frame" << std::endl;
-        }
-
-        auto depthFrame = frames-> depthFrame();
-        if (!depthFrame) {
-            std::cerr << "cloudnt get depth frame" << std::endl;
-        }
-
-        pipe.stop();
-
-    if (colorFrame) {
-            saveColor(colorFrame);
-        }
-    if (depthFrame) {
-            saveDepth(depthFrame);
+void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
+    if (!frameset) {
+        std::cerr << "no frames" << std::endl;
+        return;
     }
 
-    makePointCloud(alignedFrames);
+    auto color = frameset->colorFrame();
+    auto depth = frameset->depthFrame();
+
+
+    auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align depth frame to color frame
+    auto alignedFrames = alignFilter->process(frameset);
+    std::cout << "got frames" <<  std::endl;
+    std::cout << frameset->getCount() << std::endl;
+
+
+    auto colorFrame = frameset->colorFrame();
+    if(!colorFrame) {
+        std::cerr << "couldnt get color frame" << std::endl;
+    }
+
+    auto depthFrame = frameset-> depthFrame();
+    if (!depthFrame) {
+        std::cerr << "couldnt get depth frame" << std::endl;
+    }
+
+
+     // Run this in the background so we dont miss frames
+    std::thread([=]() {
+        if (colorFrame) saveColor(colorFrame);
+        if (depthFrame) saveDepth(depthFrame);
+    }).detach();
 }
-    catch(ob::Error &e) {
-        std::cerr << "error occured" << std::endl;
+
+void deviceChangedCallback(std::shared_ptr<DeviceList> added, std::shared_ptr<DeviceList> removed) {
+    // device(s) have been connecxted
+    if (added && added->deviceCount() > 0) {
+        std::cout << "new device has been connected:\n";
+        for (uint32_t i = 0; i < added->deviceCount(); ++i) {
+            auto devInfo = added->getDevice(i)->getDeviceInfo();
+            std::cout << " Serial number: " << devInfo->getSerialNumber() << std::endl;
         }
+    }
+
+    if (removed && removed->deviceCount() > 0) {
+        std::cout << "Device(s) disconnected:\n";
+        for (uint32_t i = 0; i < removed->deviceCount(); ++i) {
+            auto devInfo = removed->getDevice(i)->getDeviceInfo();
+            std::cout << "  - Serial: " << devInfo->getSerialNumber() << std::endl;
+        }
+    }
+}
+
+int main() {
+    std::cout << "starting orbbec program" << std::endl;
+    ob::Pipeline pipe;
+
+
+    ob::Context context;
+    auto deviceList = context.queryDeviceList();
+    int deviceCount = deviceList->deviceCount();
+    std::cout << "Found " << deviceCount << " devices." << std::endl;
+    for (int i = 0; i < deviceCount; ++i) {
+        auto device = deviceList->getDevice(i);
+        auto info = device->getDeviceInfo();
+
+        std::string serial = info->getSerialNumber();
+        std::string name = info->getName();
+        std::string uid = info->getUid();
+
+        std::cout << "Device " << i+1 << ":\n"
+        << "  Name:   " << name << "\n"
+        << "  Serial Number: " << serial << "\n"
+        << "  UID:    " << uid << "\n";
+    }
+
+    context.setDeviceChangedCallback(deviceChangedCallback);
+
+    std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
+    auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
+    std::shared_ptr<ob::VideoStreamProfile> depthProfile = nullptr;
+    if(depthProfiles) {
+        depthProfile = std::const_pointer_cast<ob::StreamProfile>(depthProfiles->getProfile(OB_PROFILE_DEFAULT))->as<ob::VideoStreamProfile>();
+    }
+
+    std :: cout << "enabling depth stream" << std::endl;
+    config->enableStream(depthProfile);
+
+    auto colorProfiles = pipe.getStreamProfileList(OB_SENSOR_COLOR);
+    std::shared_ptr<ob::VideoStreamProfile> colorProfile = nullptr;
+    if (colorProfiles) {
+        colorProfile = std::const_pointer_cast<ob::StreamProfile>(colorProfiles->getProfile(OB_PROFILE_DEFAULT))->as<ob::VideoStreamProfile>();
+    }
+    std :: cout << "enabling color stream" << std::endl;
+    config -> enableStream(colorProfile);
+
+    // ensure depth and color are synchronized.
+    pipe.enableFrameSync();
+
+    //pipe.start(config);
+    pipe.start(config, frameCallback);
+
+
+     while (true) {
+        //std::cout << "waiting for frames" << std::endl;
+       // std::this_thread::sleep_for(std::chrono::seconds(1));
+     }
+
+    // // // Discarding the first few frames since it takes a bit for them to initialize.
+    // for (int i = 0; i<5; i++) {
+    //     pipe.waitForFrames();
+    // }
+
+    // auto frames = pipe.waitForFrames();
+    // if(!frames) {
+    //     std::cerr << "couldnt get frames" << std::endl;
+    //     return -1;
+    // }
+
+    // auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align depth frame to color frame
+    // auto alignedFrames = alignFilter->process(frames);
+    // std::cout << "got frames" <<  std::endl;
+    // std::cout << frames->getCount() << std::endl;
+
+
+    // auto colorFrame = frames->colorFrame();
+    // if(!colorFrame) {
+    //     std::cerr << "couldnt get color frame" << std::endl;
+    // }
+
+    // auto depthFrame = frames-> depthFrame();
+    // if (!depthFrame) {
+    //     std::cerr << "cloudnt get depth frame" << std::endl;
+    // }
+
+    //pipe.stop();
+
+// if (colorFrame) {
+//         saveColor(colorFrame);
+//     }
+// if (depthFrame) {
+//         saveDepth(depthFrame);
+// }
+
+// makePointCloud(alignedFrames);
+
     return 0;
 }
 
