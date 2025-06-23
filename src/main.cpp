@@ -148,24 +148,24 @@ void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
     // }).detach();
 }
 
-void deviceChangedCallback(std::shared_ptr<DeviceList> added, std::shared_ptr<DeviceList> removed) {
-    // device(s) have been connecxted
-    if (added && added->deviceCount() > 0) {
-        std::cout << "new device has been connected:\n";
-        for (uint32_t i = 0; i < added->deviceCount(); ++i) {
-            auto devInfo = added->getDevice(i)->getDeviceInfo();
-            std::cout << " Serial number: " << devInfo->getSerialNumber() << std::endl;
-        }
-    }
+// void deviceChangedCallback(std::shared_ptr<DeviceList> added, std::shared_ptr<DeviceList> removed) {
+//     // device(s) have been connecxted
+//     if (added && added->deviceCount() > 0) {
+//         std::cout << "new device has been connected:\n";
+//         for (uint32_t i = 0; i < added->deviceCount(); ++i) {
+//             auto devInfo = added->getDevice(i)->getDeviceInfo();
+//             std::cout << " Serial number: " << devInfo->getSerialNumber() << std::endl;
+//         }
+//     }
 
-    if (removed && removed->deviceCount() > 0) {
-        std::cout << "Device(s) disconnected:\n";
-        for (uint32_t i = 0; i < removed->deviceCount(); ++i) {
-            auto devInfo = removed->getDevice(i)->getDeviceInfo();
-            std::cout << "  - Serial: " << devInfo->getSerialNumber() << std::endl;
-        }
-    }
-}
+//     if (removed && removed->deviceCount() > 0) {
+//         std::cout << "Device(s) disconnected:\n";
+//         for (uint32_t i = 0; i < removed->deviceCount(); ++i) {
+//             auto devInfo = removed->getDevice(i)->getDeviceInfo();
+//             std::cout << "  - Serial: " << devInfo->getSerialNumber() << std::endl;
+//         }
+//     }
+// }
 
 int main() {
     std::cout << "starting orbbec program" << std::endl;
@@ -190,7 +190,7 @@ int main() {
         << "  UID:    " << uid << "\n";
     }
 
-    context.setDeviceChangedCallback(deviceChangedCallback);
+    //context.setDeviceChangedCallback(deviceChangedCallback);
 
     std::shared_ptr<ob::Config> config = std::make_shared<ob::Config>();
     auto depthProfiles = pipe.getStreamProfileList(OB_SENSOR_DEPTH);
