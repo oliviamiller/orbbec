@@ -115,37 +115,37 @@ void makePointCloud(std::shared_ptr<ob::Frame> frames) {
 
 
 void frameCallback(std::shared_ptr<ob::FrameSet> frameset) {
-    if (!frameset) {
-        std::cerr << "no frames" << std::endl;
-        return;
-    }
+    // if (!frameset) {
+    //     std::cerr << "no frames" << std::endl;
+    //     return;
+    // }
 
-    auto color = frameset->colorFrame();
-    auto depth = frameset->depthFrame();
-
-
-    auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align depth frame to color frame
-    auto alignedFrames = alignFilter->process(frameset);
-    std::cout << "got frames" <<  std::endl;
-    std::cout << frameset->getCount() << std::endl;
+    // auto color = frameset->colorFrame();
+    // auto depth = frameset->depthFrame();
 
 
-    auto colorFrame = frameset->colorFrame();
-    if(!colorFrame) {
-        std::cerr << "couldnt get color frame" << std::endl;
-    }
-
-    auto depthFrame = frameset-> depthFrame();
-    if (!depthFrame) {
-        std::cerr << "couldnt get depth frame" << std::endl;
-    }
+    // auto alignFilter = std::make_shared<ob::Align>(OB_STREAM_COLOR); // Align depth frame to color frame
+    // auto alignedFrames = alignFilter->process(frameset);
+    // std::cout << "got frames" <<  std::endl;
+    // std::cout << frameset->getCount() << std::endl;
 
 
-     // Run this in the background so we dont miss frames
-    std::thread([=]() {
-        if (colorFrame) saveColor(colorFrame);
-        if (depthFrame) saveDepth(depthFrame);
-    }).detach();
+    // auto colorFrame = frameset->colorFrame();
+    // if(!colorFrame) {
+    //     std::cerr << "couldnt get color frame" << std::endl;
+    // }
+
+    // auto depthFrame = frameset-> depthFrame();
+    // if (!depthFrame) {
+    //     std::cerr << "couldnt get depth frame" << std::endl;
+    // }
+
+
+    //  // Run this in the background so we dont miss frames
+    // std::thread([=]() {
+    //     if (colorFrame) saveColor(colorFrame);
+    //     if (depthFrame) saveDepth(depthFrame);
+    // }).detach();
 }
 
 void deviceChangedCallback(std::shared_ptr<DeviceList> added, std::shared_ptr<DeviceList> removed) {
@@ -215,6 +215,28 @@ int main() {
 
     //pipe.start(config);
     pipe.start(config, frameCallback);
+
+
+    auto intr = depthProfile -> getIntrinsic();
+    std::cout << "depth instrinsics: " << std::endl;
+    std::cout << "  Width: " << intr.width << "\n";
+    std::cout << "  Height: " << intr.height << "\n";
+    std::cout << "  Fx: " << intr.fx << "\n";
+    std::cout << "  Fy: " << intr.fy << "\n";
+    std::cout << "  Cx: " << intr.cx << "\n";
+    std::cout << "  Cy: " << intr.cy << "\n";
+    std::cout << "\n\n";
+
+
+    auto colorIntr = colorProfile -> getIntrinsic();
+    std::cout << "color instrinsics: " << std::endl;
+    std::cout << "  Width: " << colorIntr.width << "\n";
+    std::cout << "  Height: " << colorIntr.height << "\n";
+    std::cout << "  Fx: " << colorIntr.fx << "\n";
+    std::cout << "  Fy: " << colorIntr.fy << "\n";
+    std::cout << "  Cx: " << colorIntr.cx << "\n";
+    std::cout << "  Cy: " << colorIntr.cy << "\n";
+    std::cout << "\n\n";
 
 
      while (true) {
